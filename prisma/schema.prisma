@@ -1,0 +1,172 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// User model - for both B2B and B2C users
+model User {
+  id        String   @id @default(uuid())
+  email     String   @unique
+  name      String?
+  role      UserRole @default(B2C)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relationships
+  businesses   Business[]
+  bookings     Booking[]
+  calendarToken CalendarToken?
+
+  @@map("users")
+}
+
+enum UserRole {
+  B2B
+  B2C
+}
+
+// Business model - represents a wellness provider (B2B)
+model Business {
+  id          String   @id @default(uuid())
+  ownerId     String
+  name        String
+  description String?  @db.Text
+  category    BusinessCategory?
+  phone       String?
+  email       String?
+  
+  // Location information
+  address     String?
+  city        String?
+  state       String?
+  postalCode  String?
+  country     String?
+  serviceRadius Int?   // In miles
+  
+  // Profile information
+  profileImage String?
+  certifications String? @db.Text
+  promotionalText String? @db.Text
+  yearsInBusiness Int?
+  
+  // Capacity
+  capacity    Int?     // Max clients per hour
+  
+  // Payment information
+  paymentProviderId String? // e.g., Stripe Connect ID
+  
+  // Timestamps
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relationships
+  owner       User     @relation(fields: [ownerId], references: [id])
+  availability Availability[]
+  bookings     Booking[]
+
+  onboardingStep String? // e.g., "basic-info", "location", "profile", "complete"
+
+  @@map("businesses")
+}
+
+enum BusinessCategory {
+  TOUCH
+  SIGHT
+  SMELL
+  TASTE
+  SOUND
+  CONNECTION
+}
+
+// Availability model - for business operating hours
+model Availability {
+  id          String   @id @default(uuid())
+  businessId  String
+  dayOfWeek   Int      // 0 = Sunday, 1 = Monday, etc.
+  startTime   String   // Format: "HH:MM" in 24-hour
+  endTime     String   // Format: "HH:MM" in 24-hour
+  duration    Int      // In minutes (e.g., 30 for 30-minute slots)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relationships
+  business    Business @relation(fields: [businessId], references: [id])
+
+  @@map("availability")
+}
+
+// Booking model - represents a client booking with a business
+model Booking {
+  id            String        @id @default(uuid())
+  userId        String
+  businessId    String
+  startDatetime DateTime
+  endDatetime   DateTime
+  status        BookingStatus @default(PENDING)
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  // Relationships
+  user          User          @relation(fields: [userId], references: [id])
+  business      Business      @relation(fields: [businessId], references: [id])
+  payment       Payment?
+
+  @@map("bookings")
+}
+
+enum BookingStatus {
+  PENDING
+  CONFIRMED
+  COMPLETED
+  CANCELED
+}
+
+// Payment model - for Stripe payments
+model Payment {
+  id                    String        @id @default(uuid())
+  bookingId             String        @unique
+  stripePaymentIntentId String?
+  amount                Int           // In cents
+  currency              String        @default("USD")
+  status                PaymentStatus @default(PENDING)
+  createdAt             DateTime      @default(now())
+  updatedAt             DateTime      @updatedAt
+
+  // Relationships
+  booking               Booking       @relation(fields: [bookingId], references: [id])
+
+  @@map("payments")
+}
+
+enum PaymentStatus {
+  PENDING
+  SUCCEEDED
+  FAILED
+  REFUNDED
+}
+
+// CalendarToken model - for Google Calendar integration
+model CalendarToken {
+  id                 String   @id @default(uuid())
+  userId             String   @unique
+  googleAccessToken  String
+  googleRefreshToken String
+  tokenExpiry        DateTime
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  // Relationships
+  user               User     @relation(fields: [userId], references: [id])
+
+  @@map("calendar_tokens")
+}
